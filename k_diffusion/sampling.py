@@ -34,9 +34,13 @@ def get_sigmas_vp(n, beta_d=19.9, beta_min=0.1, eps_s=1e-3, device='cpu'):
     return append_zero(sigmas)
 
 
-def to_d(x, sigma, denoised):
+def to_d(x, sigma, denoised, clone_please=False):
     """Converts a denoiser output to a Karras ODE derivative."""
-    return (x - denoised) / utils.append_dims(sigma, x.ndim)
+    coeff = utils.append_dims(sigma, x.ndim)
+    # for some reason, cloning coeff fixes a problem where values were returned as ±inf
+    # there's probably a better place to do the cloning than here, but this fixes sample_heun on MPS
+    coeff = coeff.detach().clone() if coeff.device.type == 'mps' and clone_please else coeff
+    return (x - denoised) / coeff
 
 
 def get_ancestral_step(sigma_from, sigma_to):
@@ -109,7 +113,7 @@ def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, 
             # Heun's method
             x_2 = x + d * dt
             denoised_2 = model(x_2, sigmas[i + 1] * s_in, **extra_args)
-            d_2 = to_d(x_2, sigmas[i + 1], denoised_2)
+            d_2 = to_d(x_2, sigmas[i + 1], denoised_2, clone_please=True)
             d_prime = (d + d_2) / 2
             x = x + d_prime * dt
     return x
