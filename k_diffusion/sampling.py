@@ -1,9 +1,12 @@
 import math
+import numpy as np
+from numpy.typing import _ArrayLikeFloat_co
 
 from scipy import integrate
 import torch
 from torchdiffeq import odeint
 from tqdm.auto import trange, tqdm
+from typing import Optional
 
 from . import utils
 
@@ -52,7 +55,7 @@ def get_ancestral_step(sigma_from, sigma_to):
 
 
 @torch.no_grad()
-def sample_euler(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1.):
+def sample_euler(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., quanta: Optional[_ArrayLikeFloat_co]=None):
     """Implements Algorithm 2 (Euler steps) from Karras et al. (2022)."""
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -60,6 +63,7 @@ def sample_euler(model, x, sigmas, extra_args=None, callback=None, disable=None,
         gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
+        sigma_hat = sigma_hat if quanta is None else quanta[torch.argmin((quanta-sigma_hat).abs(), dim=0)]
         if gamma > 0:
             x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
@@ -91,7 +95,7 @@ def sample_euler_ancestral(model, x, sigmas, extra_args=None, callback=None, dis
 
 
 @torch.no_grad()
-def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1.):
+def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., quanta: Optional[_ArrayLikeFloat_co]=None):
     """Implements Algorithm 2 (Heun steps) from Karras et al. (2022)."""
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -99,6 +103,7 @@ def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, 
         gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
+        sigma_hat = sigma_hat if quanta is None else quanta[torch.argmin((quanta-sigma_hat).abs(), dim=0)]
         if gamma > 0:
             x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
@@ -120,7 +125,7 @@ def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, 
 
 
 @torch.no_grad()
-def sample_dpm_2(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1.):
+def sample_dpm_2(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., quanta: Optional[_ArrayLikeFloat_co]=None):
     """A sampler inspired by DPM-Solver-2 and Algorithm 2 from Karras et al. (2022)."""
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -128,6 +133,7 @@ def sample_dpm_2(model, x, sigmas, extra_args=None, callback=None, disable=None,
         gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
+        sigma_hat = sigma_hat if quanta is None else quanta[torch.argmin((quanta-sigma_hat).abs(), dim=0)]
         if gamma > 0:
             x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
