@@ -15,13 +15,14 @@ def append_zero(x):
     return torch.cat([x, x.new_zeros([1])])
 
 
-def get_sigmas_karras(n, sigma_min, sigma_max, rho=7., device='cpu'):
+def get_sigmas_karras(n, sigma_min, sigma_max, rho=7., device='cpu', concat_zero=True):
     """Constructs the noise schedule of Karras et al. (2022)."""
     ramp = torch.linspace(0, 1, n)
     min_inv_rho = sigma_min ** (1 / rho)
     max_inv_rho = sigma_max ** (1 / rho)
     sigmas = (max_inv_rho + ramp * (min_inv_rho - max_inv_rho)) ** rho
-    return append_zero(sigmas).to(device)
+    sigmas = sigmas.to(device)
+    return append_zero(sigmas) if concat_zero else sigmas
 
 
 def get_sigmas_exponential(n, sigma_min, sigma_max, device='cpu'):
