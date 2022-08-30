@@ -7,19 +7,15 @@ import torch
 from torch import Tensor
 from torchdiffeq import odeint
 from tqdm.auto import trange, tqdm
-from typing import Optional, Callable, TypeAlias, Union
+from typing import Optional, Callable, TypeAlias
 
 from . import utils
 
 TensorOperator: TypeAlias = Callable[[Tensor], Tensor]
 
-def _quantize(quanta: Tensor, candidate: Union[int, float, Tensor]) -> Tensor:
-    """Rounds `candidate` to the nearest element in `quanta`"""
-    return quanta[torch.argmin((quanta-candidate).abs(), dim=0)]
-
 def make_quantizer(quanta: Tensor) -> TensorOperator:
     """Returns an monotype operator which accepts a single-element 1-dimensional Tensor, and rounds its element to the nearest element in `quanta`"""
-    return partial(_quantize, quanta)
+    return partial(utils.quantize, quanta)
 
 def append_zero(x):
     return torch.cat([x, x.new_zeros([1])])
