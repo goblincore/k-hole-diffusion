@@ -1,15 +1,25 @@
 import math
 import numpy as np
-from numpy.typing import _ArrayLikeFloat_co
 
+from functools import partial
 from scipy import integrate
 import torch
+from torch import Tensor
 from torchdiffeq import odeint
 from tqdm.auto import trange, tqdm
-from typing import Optional
+from typing import Optional, Callable, TypeAlias, Union
 
 from . import utils
 
+TensorOperator: TypeAlias = Callable[[Tensor], Tensor]
+
+def _quantize(quanta: Tensor, candidate: Union[int, float, Tensor]) -> Tensor:
+    """Rounds `candidate` to the nearest element in `quanta`"""
+    return quanta[torch.argmin((quanta-candidate).abs(), dim=0)]
+
+def make_quantizer(quanta: Tensor) -> TensorOperator:
+    """Returns an monotype operator which accepts a single-element 1-dimensional Tensor, and rounds its element to the nearest element in `quanta`"""
+    return partial(_quantize, quanta)
 
 def append_zero(x):
     return torch.cat([x, x.new_zeros([1])])
@@ -56,7 +66,7 @@ def get_ancestral_step(sigma_from, sigma_to):
 
 
 @torch.no_grad()
-def sample_euler(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., quanta: Optional[_ArrayLikeFloat_co]=None):
+def sample_euler(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., decorate_sigma_hat: Optional[TensorOperator] = None):
     """Implements Algorithm 2 (Euler steps) from Karras et al. (2022)."""
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -64,7 +74,7 @@ def sample_euler(model, x, sigmas, extra_args=None, callback=None, disable=None,
         gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
-        sigma_hat = sigma_hat if quanta is None else quanta[torch.argmin((quanta-sigma_hat).abs(), dim=0)]
+        sigma_hat = decorate_sigma_hat(sigma_hat) if callable(decorate_sigma_hat) else sigma_hat
         if gamma > 0:
             x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
@@ -96,7 +106,7 @@ def sample_euler_ancestral(model, x, sigmas, extra_args=None, callback=None, dis
 
 
 @torch.no_grad()
-def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., quanta: Optional[_ArrayLikeFloat_co]=None):
+def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., decorate_sigma_hat: Optional[TensorOperator] = None):
     """Implements Algorithm 2 (Heun steps) from Karras et al. (2022)."""
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -104,7 +114,7 @@ def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, 
         gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
-        sigma_hat = sigma_hat if quanta is None else quanta[torch.argmin((quanta-sigma_hat).abs(), dim=0)]
+        sigma_hat = decorate_sigma_hat(sigma_hat) if callable(decorate_sigma_hat) else sigma_hat
         if gamma > 0:
             x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
@@ -126,7 +136,7 @@ def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, 
 
 
 @torch.no_grad()
-def sample_dpm_2(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., quanta: Optional[_ArrayLikeFloat_co]=None):
+def sample_dpm_2(model, x, sigmas, extra_args=None, callback=None, disable=None, s_churn=0., s_tmin=0., s_tmax=float('inf'), s_noise=1., decorate_sigma_hat: Optional[TensorOperator] = None):
     """A sampler inspired by DPM-Solver-2 and Algorithm 2 from Karras et al. (2022)."""
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
@@ -134,7 +144,7 @@ def sample_dpm_2(model, x, sigmas, extra_args=None, callback=None, disable=None,
         gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
-        sigma_hat = sigma_hat if quanta is None else quanta[torch.argmin((quanta-sigma_hat).abs(), dim=0)]
+        sigma_hat = decorate_sigma_hat(sigma_hat) if callable(decorate_sigma_hat) else sigma_hat
         if gamma > 0:
             x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
