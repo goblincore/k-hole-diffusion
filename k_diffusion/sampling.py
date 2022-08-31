@@ -93,7 +93,7 @@ def sample_euler_ancestral(model, x, sigmas, extra_args=None, callback=None, dis
         sigma_down, sigma_up = get_ancestral_step(sigmas[i], sigmas[i + 1])
         if callback is not None:
             callback({'x': x, 'i': i, 'sigma': sigmas[i], 'sigma_hat': sigmas[i], 'denoised': denoised})
-        d = to_d(x, sigmas[i], denoised)
+        d = to_d(x, sigmas[i], denoised, clone_please=True)
         # Euler method
         dt = sigma_down - sigmas[i]
         x = x + d * dt
